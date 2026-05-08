@@ -83,7 +83,7 @@ Follow the existing pattern — `list_customers` in [server.py](servicetitan_mcp
 
 ```python
 @mcp.tool()
-async def list_<resource>(tenant: str, page: int = 1, page_size: int = 50, ...) -> str:
+async def list_<resource>(tenant: str, page: int = 1, page_size: int = 200, ...) -> str:
     """Short purpose. When to use: ... When NOT: ...
 
     tenant: name of a configured ServiceTitan tenant (call list_tenants)

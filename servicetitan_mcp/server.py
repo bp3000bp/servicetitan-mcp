@@ -35,14 +35,15 @@ HOW TO USE THIS SERVER EFFICIENTLY:
    server-side filters (name, status, customer_id, date ranges). Use them.
    Listing every customer then filtering locally wastes API quota and tokens.
 
-2. PAGINATION. `list_*` tools default to page_size=50. `page_size` is passed
-   directly to ServiceTitan; most endpoints accept hundreds to a few thousand
-   per page (ST enforces its own per-endpoint cap). Prefer a large `page_size`
-   over many paged calls. ALWAYS trust the `hasMore=…` footer — NOT the number
-   of items shown — to decide whether more pages exist. `totalCount` may be
-   reported as `unknown` for endpoints that don't return it; in that case
-   `hasMore` is inferred from whether a full page came back, so keep paging
-   until `hasMore=False`.
+2. PAGINATION. `list_*` tools default to page_size=200 (run_report stays at
+   50 — its quota is much tighter). `page_size` is passed directly to
+   ServiceTitan; most endpoints accept hundreds to a few thousand per page
+   (ST enforces its own per-endpoint cap). For full-table scans, raise
+   page_size further (500–1000) rather than walking many pages. ALWAYS trust
+   the `hasMore=…` footer — NOT the number of items shown — to decide
+   whether more pages exist. `totalCount` may be reported as `unknown` for
+   endpoints that don't return it; in that case `hasMore` is inferred from
+   whether a full page came back, so keep paging until `hasMore=False`.
 
 3. RATE LIMITS ARE HANDLED FOR YOU. The client retries 429s with backoff, so
    transient throttling is invisible. But you can still exhaust quotas:
@@ -154,7 +155,7 @@ def _fmt(data: dict | list) -> str:
 async def list_customers(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     name: str | None = None,
     active_only: bool = True,
 ) -> str:
@@ -201,7 +202,7 @@ async def get_customer(tenant: str, customer_id: int) -> str:
 async def list_locations(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     customer_id: int | None = None,
 ) -> str:
     """List service locations (physical addresses a customer owns).
@@ -243,7 +244,7 @@ async def get_location(tenant: str, location_id: int) -> str:
 async def list_leads(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     status: str | None = None,
 ) -> str:
     """List leads/sales opportunities (not yet converted to jobs).
@@ -267,7 +268,7 @@ async def list_leads(
 async def list_bookings(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     status: str | None = None,
 ) -> str:
     """List inbound bookings (call-in / web-form requests awaiting scheduling).
@@ -292,7 +293,7 @@ async def list_bookings(
 async def list_contacts(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     customer_id: int | None = None,
 ) -> str:
     """List individual contacts (phone/email) attached to customer accounts.
@@ -321,7 +322,7 @@ async def list_contacts(
 async def list_jobs(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     status: str | None = None,
     customer_id: int | None = None,
     created_on_or_after: str | None = None,
@@ -381,7 +382,7 @@ async def get_job(tenant: str, job_id: int) -> str:
 async def list_appointments(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     starts_on_or_after: str | None = None,
     starts_on_or_before: str | None = None,
 ) -> str:
@@ -428,7 +429,7 @@ async def list_job_types(tenant: str, page: int = 1, page_size: int = 200) -> st
 async def list_projects(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     status: str | None = None,
 ) -> str:
     """List multi-job projects (umbrella entity that groups related jobs).
@@ -470,7 +471,7 @@ async def get_project(tenant: str, project_id: int) -> str:
 async def list_invoices(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     job_id: int | None = None,
     customer_id: int | None = None,
     created_on_or_after: str | None = None,
@@ -522,7 +523,7 @@ async def get_invoice(tenant: str, invoice_id: int) -> str:
 async def list_payments(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     created_on_or_after: str | None = None,
 ) -> str:
     """List payments received from customers (cash in).
@@ -560,7 +561,7 @@ async def list_payment_types(tenant: str, page: int = 1, page_size: int = 200) -
 async def list_inventory_bills(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     created_on_or_after: str | None = None,
 ) -> str:
     """List AP bills from vendors (inventory purchases, cost side).
@@ -583,7 +584,7 @@ async def list_inventory_bills(
 async def list_journal_entries(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     created_on_or_after: str | None = None,
 ) -> str:
     """List GL journal entries posted from ServiceTitan.
@@ -637,7 +638,7 @@ async def list_tax_zones(tenant: str, page: int = 1, page_size: int = 200) -> st
 async def list_estimates(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     job_id: int | None = None,
     status: str | None = None,
     sold_after: str | None = None,
@@ -687,7 +688,7 @@ async def get_estimate(tenant: str, estimate_id: int) -> str:
 async def list_appointment_assignments(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     starts_on_or_after: str | None = None,
     starts_on_or_before: str | None = None,
 ) -> str:
@@ -715,7 +716,7 @@ async def list_appointment_assignments(
 async def list_technician_shifts(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     starts_on_or_after: str | None = None,
     starts_on_or_before: str | None = None,
 ) -> str:
@@ -757,7 +758,7 @@ async def list_zones(tenant: str, page: int = 1, page_size: int = 200) -> str:
 async def list_non_job_appointments(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     starts_on_or_after: str | None = None,
 ) -> str:
     """List internal time blocks that aren't customer work (training, meetings).
@@ -784,7 +785,7 @@ async def list_non_job_appointments(
 async def list_pricebook_services(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     active_only: bool = True,
 ) -> str:
     """List pricebook SERVICES (labor / diagnostic line items techs sell).
@@ -810,7 +811,7 @@ async def list_pricebook_services(
 async def list_pricebook_materials(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     active_only: bool = True,
 ) -> str:
     """List pricebook MATERIALS (consumable parts: pipe, fittings, filters).
@@ -834,7 +835,7 @@ async def list_pricebook_materials(
 async def list_pricebook_equipment(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     active_only: bool = True,
 ) -> str:
     """List pricebook EQUIPMENT (big-ticket installable units: AC, furnace, water heater).
@@ -874,7 +875,7 @@ async def list_pricebook_categories(tenant: str, page: int = 1, page_size: int =
 async def list_purchase_orders(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     status: str | None = None,
 ) -> str:
     """List purchase orders (POs to vendors for parts/equipment).
@@ -941,7 +942,7 @@ async def list_trucks(tenant: str, page: int = 1, page_size: int = 200) -> str:
 async def list_memberships(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     status: str | None = None,
 ) -> str:
     """List customer memberships (maintenance agreements tied to a customer).
@@ -980,7 +981,7 @@ async def list_membership_types(tenant: str, page: int = 1, page_size: int = 200
 async def list_recurring_services(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
 ) -> str:
     """List recurring services (tune-ups scheduled under memberships).
 
@@ -1199,7 +1200,7 @@ async def run_report(
 async def list_payrolls(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
 ) -> str:
     """List payroll RUNS (each payroll cycle — pay period envelope).
 
@@ -1218,7 +1219,7 @@ async def list_employee_payrolls(
     tenant: str,
     payroll_id: int,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
 ) -> str:
     """Per-employee summary for one payroll run (gross/net, hours, taxes).
 
@@ -1241,7 +1242,7 @@ async def list_gross_pay_items(
     payroll_id: int,
     employee_id: int | None = None,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
 ) -> str:
     """List individual gross-pay line items (shift, bonus, commission, tip).
 
@@ -1269,7 +1270,7 @@ async def list_gross_pay_items(
 async def list_calls(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     created_on_or_after: str | None = None,
     created_on_or_before: str | None = None,
 ) -> str:
@@ -1297,7 +1298,7 @@ async def list_calls(
 # ═══════════════════════════════════════════════════════════════════════
 
 @mcp.tool()
-async def list_forms(tenant: str, page: int = 1, page_size: int = 50) -> str:
+async def list_forms(tenant: str, page: int = 1, page_size: int = 200) -> str:
     """List form TEMPLATES (definitions: "Post-Install Checklist", etc.).
 
     When to use: form-config audit, resolving formId from a submission.
@@ -1314,7 +1315,7 @@ async def list_forms(tenant: str, page: int = 1, page_size: int = 50) -> str:
 async def list_form_submissions(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     created_on_or_after: str | None = None,
 ) -> str:
     """List completed form submissions (techs filling in checklists on jobs).
@@ -1359,7 +1360,7 @@ async def list_campaigns(tenant: str, page: int = 1, page_size: int = 200) -> st
 async def list_campaign_costs(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     campaign_id: int | None = None,
 ) -> str:
     """List marketing campaign COSTS (spend per campaign per period).
@@ -1386,7 +1387,7 @@ async def list_campaign_costs(
 async def list_installed_equipment(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     location_id: int | None = None,
 ) -> str:
     """List equipment installed at customer locations (serial numbers, install dates).
@@ -1415,7 +1416,7 @@ async def list_installed_equipment(
 async def list_tasks(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
 ) -> str:
     """List internal tasks (the follow-up/todo module, not field jobs).
 
@@ -1439,7 +1440,7 @@ async def list_tasks(
 async def list_activities(
     tenant: str,
     page: int = 1,
-    page_size: int = 50,
+    page_size: int = 200,
     starts_on_or_after: str | None = None,
 ) -> str:
     """List tech timesheet activities (drive time, job time, breaks — actual clock).
