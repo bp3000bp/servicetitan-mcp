@@ -14,6 +14,7 @@ configured tenants. Call `list_tenants` to discover the names.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import traceback
@@ -61,7 +62,9 @@ HOW TO USE THIS SERVER EFFICIENTLY:
    upfront. Use `list_customers(name=...)` to find the ID, then `get_customer`
    only if you need the full record.
 
-6. STATIC LOOKUPS ARE CACHEABLE WITHIN A SESSION. Tools whose docstring
+6. STATIC LOOKUPS ARE CACHEABLE WITHIN A SESSION. When you need IDs from
+   several of these tables, call `get_lookup_tables` once — it bundles the
+   fan-out into one tool call. Otherwise, individual tools whose docstring
    contains the phrase "static config" (`list_business_units`,
    `list_job_types`, `list_zones`, `list_warehouses`, `list_payment_types`,
    `list_tax_zones`, `list_payment_terms`, `list_membership_types`,
@@ -1486,6 +1489,102 @@ async def list_activity_categories(tenant: str, page: int = 1, page_size: int = 
     client = _resolve(tenant)
     data = await client.list_resource("timesheets", "activity-codes", page, page_size)
     return _fmt(data)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  BUNDLED LOOKUPS
+# ═══════════════════════════════════════════════════════════════════════
+
+# Static-config lookup tables, keyed by short kind name → (category, resource)
+# tuples accepted by client.list_resource. Keep in sync with bullet #6 of the
+# server instructions and the static-config tool docstrings.
+_LOOKUP_KINDS: dict[str, tuple[str, str]] = {
+    "business_units": ("settings", "business-units"),
+    "job_types": ("jpm", "job-types"),
+    "zones": ("dispatch", "zones"),
+    "warehouses": ("inventory", "warehouses"),
+    "payment_types": ("accounting", "payment-types"),
+    "tax_zones": ("accounting", "tax-zones"),
+    "payment_terms": ("accounting", "payment-terms"),
+    "membership_types": ("memberships", "membership-types"),
+    "tag_types": ("settings", "tag-types"),
+    "activity_categories": ("timesheets", "activity-codes"),
+    "pricebook_categories": ("pricebook", "categories"),
+    "inventory_vendors": ("inventory", "vendors"),
+    "trucks": ("inventory", "trucks"),
+    "user_roles": ("settings", "user-roles"),
+    "campaigns": ("marketing", "campaigns"),
+}
+
+
+@mcp.tool()
+async def get_lookup_tables(
+    tenant: str,
+    kinds: list[str] | None = None,
+    page_size: int = 200,
+) -> str:
+    """Fetch multiple static lookup tables in one round trip — static config.
+
+    When to use: at the start of a session when you need to resolve IDs
+    across several lookup tables (business unit, job type, zone, etc.).
+    Replaces 5–10 sequential `list_*` calls with a single fan-out. Cache
+    the result and reuse the IDs for the rest of the conversation — these
+    tables rarely change.
+    When NOT: when you only need one specific table — call the matching
+    `list_*` tool directly. When you need filters (e.g. campaigns by date)
+    — this tool always pulls the first `page_size` rows unfiltered.
+
+    kinds: subset of {business_units, job_types, zones, warehouses,
+        payment_types, tax_zones, payment_terms, membership_types,
+        tag_types, activity_categories, pricebook_categories,
+        inventory_vendors, trucks, user_roles, campaigns}. Defaults to
+        the full set when omitted.
+
+    tenant: name of a configured ServiceTitan tenant (call list_tenants)
+    """
+    client = _resolve(tenant)
+    requested = list(kinds) if kinds else list(_LOOKUP_KINDS)
+    unknown = [k for k in requested if k not in _LOOKUP_KINDS]
+    if unknown:
+        return json.dumps(
+            {
+                "error": f"unknown kinds: {unknown}",
+                "valid_kinds": sorted(_LOOKUP_KINDS),
+            },
+            indent=2,
+        )
+
+    async def _fetch(kind: str) -> tuple[str, dict | Exception]:
+        category, resource = _LOOKUP_KINDS[kind]
+        try:
+            data = await client.list_resource(category, resource, 1, page_size)
+            return kind, data
+        except Exception as exc:
+            return kind, exc
+
+    results = await asyncio.gather(*(_fetch(k) for k in requested))
+
+    out: dict = {}
+    for kind, data in results:
+        if isinstance(data, Exception):
+            out[kind] = {"error": f"{type(data).__name__}: {data}"}
+            continue
+        items = data.get("data", []) if isinstance(data, dict) else []
+        total = data.get("totalCount") if isinstance(data, dict) else None
+        out[kind] = {
+            "count": len(items),
+            "totalCount": total if total is not None else "unknown",
+            "items": items,
+        }
+    out["_meta"] = {
+        "kinds_fetched": requested,
+        "note": (
+            f"Bundled {len(requested)} lookup table(s) in one call. These "
+            "tables are static config — cache these IDs for the rest of "
+            "the conversation instead of re-fetching."
+        ),
+    }
+    return json.dumps(out, indent=2, default=str)
 
 
 # ═══════════════════════════════════════════════════════════════════════
