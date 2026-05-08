@@ -61,7 +61,22 @@ HOW TO USE THIS SERVER EFFICIENTLY:
    upfront. Use `list_customers(name=...)` to find the ID, then `get_customer`
    only if you need the full record.
 
-6. ESCAPE HATCH. `servicetitan_api_call` exposes arbitrary endpoints (use
+6. STATIC LOOKUPS ARE CACHEABLE WITHIN A SESSION. Tools whose docstring
+   contains the phrase "static config" (`list_business_units`,
+   `list_job_types`, `list_zones`, `list_warehouses`, `list_payment_types`,
+   `list_tax_zones`, `list_payment_terms`, `list_membership_types`,
+   `list_tag_types`, `list_activity_categories`, `list_pricebook_categories`,
+   `list_inventory_vendors`, `list_trucks`, `list_user_roles`,
+   `list_campaigns`) rarely change. Call once per conversation and reuse
+   the IDs — re-fetching them on every question wastes calls.
+
+7. `list_*` USUALLY BEATS `get_*`. The list payload almost always contains
+   every field `get_*` would return for the same record. Only call `get_*`
+   when the docstring explicitly says you need extended fields not in the
+   list response (line items on `get_invoice` / `get_estimate`, full custom
+   fields and tags on `get_job`, full contact blocks on `get_customer`).
+
+8. ESCAPE HATCH. `servicetitan_api_call` exposes arbitrary endpoints (use
    `{tenant_id}` placeholder). Use when a typed tool doesn't cover the
    endpoint you need — e.g. unusual search params, POST/PATCH writes, or
    beta endpoints. Check ServiceTitan's API docs for the exact path.
@@ -411,7 +426,7 @@ async def list_appointments(
 
 @mcp.tool()
 async def list_job_types(tenant: str, page: int = 1, page_size: int = 200) -> str:
-    """List all job-type definitions in ServiceTitan (configuration, not jobs).
+    """List all job-type definitions in ServiceTitan — static config.
 
     When to use: mapping a jobTypeId from a job record to its human name;
     enumerating service offerings.
@@ -1063,7 +1078,7 @@ async def list_technicians(
 
 @mcp.tool()
 async def list_business_units(tenant: str, page: int = 1, page_size: int = 200) -> str:
-    """List business units (BU — the top-level revenue buckets: HVAC, Plumbing, etc.).
+    """List business units — top-level revenue buckets: HVAC, Plumbing, etc. — static config.
 
     When to use: almost always needed when slicing revenue or jobs by BU —
     BU ids show up on nearly every job, invoice, and report. Cache the
@@ -1078,7 +1093,7 @@ async def list_business_units(tenant: str, page: int = 1, page_size: int = 200) 
 
 @mcp.tool()
 async def list_tag_types(tenant: str, page: int = 1, page_size: int = 200) -> str:
-    """List tag-type definitions (color labels applied to customers/jobs/locations).
+    """List tag-type definitions (color labels applied to customers/jobs/locations) — static config.
 
     When to use: resolving a tagTypeId to human label for filtering.
 
@@ -1340,7 +1355,7 @@ async def list_form_submissions(
 
 @mcp.tool()
 async def list_campaigns(tenant: str, page: int = 1, page_size: int = 200) -> str:
-    """List marketing campaigns (the source attribution for jobs/leads).
+    """List marketing campaigns (the source attribution for jobs/leads) — static config.
 
     When to use: resolving campaignId on a job or lead to the channel
     name, or enumerating what channels exist. Small and static — cache it.
