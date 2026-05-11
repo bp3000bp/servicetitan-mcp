@@ -1153,11 +1153,16 @@ async def list_report_categories(tenant: str) -> str:
 async def list_reports_in_category(tenant: str, category_id: int) -> str:
     """List reports inside one category, along with their parameter schemas.
 
+    PREREQUISITE: call list_report_categories first to get a valid
+    category_id. Do NOT guess or invent a category_id — passing an invalid
+    ID (e.g. 0) causes a confusing 404 from ServiceTitan.
+
     When to use: you've found a category and need to know (a) which
     report_id to run and (b) what parameters that report requires.
     Read the `parameters` block carefully — parameter names and value
     types vary per report.
 
+    category_id: integer ID from list_report_categories — must be a real ID
     tenant: name of a configured ServiceTitan tenant (call list_tenants)
     """
     client = _resolve(tenant)
