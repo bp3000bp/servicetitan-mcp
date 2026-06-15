@@ -57,7 +57,12 @@ HOW TO USE THIS SERVER EFFICIENTLY:
    list_jobs, list_payments) with date filters over `run_report`. Reports are
    slow, quota-constrained, and return schemas that vary by report_id. Only
    reach for `run_report` when no typed tool can answer the question (e.g.
-   aggregated revenue breakdowns).
+   aggregated revenue breakdowns). To run a specific report end-to-end:
+   `get_report(category, report_id)` for its parameter schema → for any param
+   with an `acceptValues.dynamicSetId`, `get_report_parameter_values(setId)`
+   to get the legal value → `run_report(...)`. (Discover ids first via
+   `list_report_categories` → `list_reports_in_category(category)` if unknown.)
+   Each is a reporting-bucket call, so resolve value sets once and reuse them.
 
 5. FIND-BEFORE-GET. `get_customer(customer_id)` needs an ID you don't know
    upfront. Use `list_customers(name=...)` to find the ID, then `get_customer`
@@ -1135,9 +1140,10 @@ async def list_report_categories(tenant: str) -> str:
     """Discover report CATEGORIES (first step in the reporting flow).
 
     When to use: you don't know which report to run yet. Categories are
-    broad groupings (Marketing, Operations, Accounting, etc.).
-    Next step: call `list_reports_in_category(category_id)` to find a
-    specific report.
+    broad groupings (Marketing, Operations, Accounting, etc.). Each has a
+    string `id` slug (e.g. "operations").
+    Next step: call `list_reports_in_category(category)` with that slug to
+    find a specific report.
 
     Rate-limit note: lives under the reporting quota (~3 req/min in this
     server). Batch reporting work together.
@@ -1150,23 +1156,84 @@ async def list_report_categories(tenant: str) -> str:
 
 
 @mcp.tool()
-async def list_reports_in_category(tenant: str, category_id: int) -> str:
+async def list_reports_in_category(tenant: str, category: str) -> str:
     """List reports inside one category, along with their parameter schemas.
 
     PREREQUISITE: call list_report_categories first to get a valid
-    category_id. Do NOT guess or invent a category_id — passing an invalid
-    ID (e.g. 0) causes a confusing 404 from ServiceTitan.
+    category slug. Do NOT guess or invent one — passing an unknown
+    category causes a confusing 404 from ServiceTitan.
 
     When to use: you've found a category and need to know (a) which
     report_id to run and (b) what parameters that report requires.
     Read the `parameters` block carefully — parameter names and value
-    types vary per report.
+    types vary per report. If a parameter has an `acceptValues.dynamicSetId`,
+    resolve it with `get_report_parameter_values` to get the legal values.
 
-    category_id: integer ID from list_report_categories — must be a real ID
+    If you already know the report_id, skip this and call `get_report`
+    (category, report_id) — it returns one report's schema directly without
+    paging the whole category.
+
+    category: the string slug from `list_report_categories` (e.g.
+      "operations", "accounting") — NOT a numeric id.
+
     tenant: name of a configured ServiceTitan tenant (call list_tenants)
     """
     client = _resolve(tenant)
-    path = f"/reporting/v2/tenant/{client.tenant_id}/report-categories/{category_id}/reports"
+    path = f"/reporting/v2/tenant/{client.tenant_id}/report-category/{category}/reports"
+    data = await client.get(path)
+    return _fmt(data)
+
+
+@mcp.tool()
+async def get_report(tenant: str, category: str, report_id: int) -> str:
+    """Get one report's parameter schema and output fields by id.
+
+    When to use: you already know the report's `category` slug and
+    `report_id` and want its input parameters + output columns directly.
+    Cheaper and more targeted than `list_reports_in_category`, which pages
+    every report in the category.
+
+    Read the returned `parameters`: each has a `name` (what you pass to
+    `run_report`), `dataType`, `isArray`, and `isRequired`. When a
+    parameter carries `acceptValues.dynamicSetId` (e.g. a "Filter by" /
+    DateType code, or a Business Unit picker), pass that id to
+    `get_report_parameter_values` to get the allowed values.
+
+    category: the string slug from `list_report_categories` (e.g.
+      "operations") — NOT a numeric id.
+
+    tenant: name of a configured ServiceTitan tenant (call list_tenants)
+    """
+    client = _resolve(tenant)
+    path = (
+        f"/reporting/v2/tenant/{client.tenant_id}/report-category/{category}"
+        f"/reports/{report_id}"
+    )
+    data = await client.get(path)
+    return _fmt(data)
+
+
+@mcp.tool()
+async def get_report_parameter_values(tenant: str, dynamic_set_id: str) -> str:
+    """Resolve a report parameter's allowed values (dynamic value set).
+
+    When to use: a report parameter from `get_report` /
+    `list_reports_in_category` has `acceptValues.dynamicSetId` set — that
+    means its value is a code drawn from a named set, not free-form. Pass
+    that id here to get the `[value, name]` pairs, then supply the chosen
+    `value` to `run_report`.
+
+    Example: `dynamic_set_id="job-date-filter-type"` →
+      [[0,"Invoice Date"],[1,"Job Completion Date"], …] so a "Filter by" /
+      DateType parameter can be set to 0, 1, … correctly.
+
+    These sets are static within a session — resolve once and reuse the
+    values across calls rather than re-fetching (reporting quota is tight).
+
+    tenant: name of a configured ServiceTitan tenant (call list_tenants)
+    """
+    client = _resolve(tenant)
+    path = f"/reporting/v2/tenant/{client.tenant_id}/dynamic-value-sets/{dynamic_set_id}"
     data = await client.get(path)
     return _fmt(data)
 
@@ -1192,9 +1259,14 @@ async def run_report(
       1. `list_report_categories` → pick a category (the slug goes in the
          `category` arg).
       2. `list_reports_in_category` → pick a report_id AND read its
-         required parameters.
-      3. Call this tool with parameters as a JSON object, e.g.
-         `parameters={"From":"2024-01-01","To":"2024-12-31","BusinessUnitIds":[1,2,3]}`
+         required parameters. (If you already know the report_id, call
+         `get_report(category, report_id)` instead — it returns one
+         report's schema directly.)
+      3. For any parameter whose `acceptValues.dynamicSetId` is set (e.g. a
+         "Filter by" / DateType code, or a Business Unit picker), call
+         `get_report_parameter_values(dynamicSetId)` to get the legal value.
+      4. Call this tool with parameters as a JSON object, e.g.
+         `parameters={"DateType":0,"From":"2024-01-01","To":"2024-12-31","BusinessUnitIds":[1,2,3]}`
 
     Rate limits: reporting has its own bucket (~3 req/min). If you need
     multiple reports, space them out.

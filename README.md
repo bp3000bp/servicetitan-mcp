@@ -186,7 +186,9 @@ Every tool below takes `tenant: str` as its first required argument. See "Multi-
 
 ### Reporting
 - `list_report_categories` — Report categories
-- `list_reports_in_category` — Reports in a category
+- `list_reports_in_category` — Reports in a category (by category slug)
+- `get_report` — One report's parameter schema + output fields (by category slug + id)
+- `get_report_parameter_values` — Resolve a parameter's allowed values (dynamic value set)
 - `run_report` — Run a dynamic report
 
 ### Payroll
@@ -240,7 +242,7 @@ The `list_customers` endpoint has no phone/email filter. Two options:
 
 ### Revenue for a date range
 - Simple total: `list_invoices(tenant=..., created_on_or_after="2024-01-01")` — sum client-side.
-- Broken down by Business Unit or campaign: use `run_report` (reporting quota applies, slower). Step through `list_report_categories` → `list_reports_in_category` to find the right report and its parameter schema first.
+- Broken down by Business Unit or campaign: use `run_report` (reporting quota applies, slower). Discover the report first via `list_report_categories` → `list_reports_in_category(category)` (the category arg is the string slug, e.g. `"operations"`), or jump straight to `get_report(category, report_id)` if you already know the id. Then resolve any parameter that has an `acceptValues.dynamicSetId` (e.g. a "Filter by"/DateType code) with `get_report_parameter_values(dynamicSetId)`, and finally call `run_report`.
 
 ### Cross-tenant aggregation
 - *"Revenue across all businesses last month"* → call `list_invoices` once per tenant from `list_tenants`, sum client-side.
