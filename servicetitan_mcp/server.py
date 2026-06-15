@@ -988,7 +988,7 @@ async def list_memberships(
     params: dict = {}
     if status:
         params["status"] = status
-    data = await client.list_resource("memberships", "customer-memberships", page, page_size, params)
+    data = await client.list_resource("memberships", "memberships", page, page_size, params)
     return _fmt(data)
 
 
@@ -1570,7 +1570,7 @@ async def list_activity_categories(tenant: str, page: int = 1, page_size: int = 
     tenant: name of a configured ServiceTitan tenant (call list_tenants)
     """
     client = _resolve(tenant)
-    data = await client.list_resource("timesheets", "activity-codes", page, page_size)
+    data = await client.list_resource("timesheets", "activity-categories", page, page_size)
     return _fmt(data)
 
 
@@ -1591,7 +1591,7 @@ _LOOKUP_KINDS: dict[str, tuple[str, str]] = {
     "payment_terms": ("accounting", "payment-terms"),
     "membership_types": ("memberships", "membership-types"),
     "tag_types": ("settings", "tag-types"),
-    "activity_categories": ("timesheets", "activity-codes"),
+    "activity_categories": ("timesheets", "activity-categories"),
     "pricebook_categories": ("pricebook", "categories"),
     "inventory_vendors": ("inventory", "vendors"),
     "trucks": ("inventory", "trucks"),
