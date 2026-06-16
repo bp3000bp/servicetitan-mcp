@@ -181,6 +181,38 @@ def _fmt(data: dict | list) -> str:
     return json.dumps(data, indent=2, default=str)
 
 
+def _fmt_export(data: dict) -> str:
+    """Pretty-print a bulk export-feed response with continuation state.
+
+    Separate from _fmt because export feeds page via an opaque `continueFrom`
+    token, not page numbers, and `hasMore` carries WAIT semantics distinct from
+    page-based listings:
+      - hasMore=True  → call export_feed again IMMEDIATELY with the new token.
+      - hasMore=False → caught up. Do NOT loop. Wait 5–10 min before polling
+        again with the same continueFrom token to pick up new changes.
+
+    Like _fmt, returns every item the feed returned — no client-side truncation.
+    """
+    items = data.get("data", []) if isinstance(data, dict) else []
+    has_more = bool(data.get("hasMore", False)) if isinstance(data, dict) else False
+    continue_from = data.get("continueFrom") if isinstance(data, dict) else None
+    if has_more:
+        guidance = (
+            f"hasMore=True — more data available NOW. Call export_feed again "
+            f'immediately with from_token="{continue_from}".'
+        )
+    else:
+        guidance = (
+            "hasMore=False — caught up (no more data right now). Do NOT loop. "
+            f'To resume later, wait 5–10 min then call with from_token="{continue_from}".'
+        )
+    note = (
+        f"\n\n(Export feed — {len(items)} items this page, "
+        f"hasMore={has_more}, continueFrom={continue_from!r}. {guidance})"
+    )
+    return json.dumps(items, indent=2, default=str) + note
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  CRM — Customers, Contacts, Locations, Leads, Bookings
 # ═══════════════════════════════════════════════════════════════════════
@@ -2093,6 +2125,50 @@ async def resource_lookup(tenant: str, kind: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════
 #  GENERIC / POWER-USER
 # ═══════════════════════════════════════════════════════════════════════
+
+@mcp.tool()
+async def export_feed(
+    tenant: str,
+    category: str,
+    feed: str,
+    from_token: str | None = None,
+    include_recent_changes: bool = False,
+) -> str:
+    """Bulk-export an entire ServiceTitan feed via continuation tokens (cheap on quota).
+
+    When to use: syncing or scanning an ENTIRE table (every customer/job/invoice),
+    a full initial pull, or catching incremental changes since a date. Export
+    feeds hit the MAIN API (30 rps) — far cheaper than reporting and cheaper than
+    deep page-walking a list_* tool.
+    When NOT: for a filtered slice ("jobs for customer X") use the typed list_*
+    tool — export feeds do not filter, they stream the whole feed. For
+    pre-aggregated analytics use run_report.
+
+    PAGING (different from list_* tools): omit from_token to start at the
+    beginning, or pass a date "YYYY-MM-DD". Each response footer shows
+    continueFrom; if hasMore=True call again IMMEDIATELY with that token as
+    from_token. hasMore=False = caught up — STOP; wait 5–10 min for later changes.
+
+    category: crm, jpm, accounting, settings, timesheets, dispatch, inventory.
+    feed: feed path within the category. Common feeds:
+        crm: bookings, customers, customers/contacts, leads, locations, locations/contacts
+        jpm: jobs, appointments, projects
+        accounting: invoices, payments
+        settings: employees, business-units
+        timesheets: activities, activity-categories, activity-types
+    from_token: continueFrom token from a prior response, OR a start date
+        "YYYY-MM-DD". Omit to start from the beginning.
+    include_recent_changes: true delivers recent changes faster but may duplicate
+        items across calls — dedupe by record id if set.
+
+    tenant: name of a configured ServiceTitan tenant (call list_tenants)
+    """
+    client = _resolve(tenant)
+    data = await client.export_resource(
+        category, feed, from_token, include_recent_changes
+    )
+    return _fmt_export(data)
+
 
 @mcp.tool()
 async def servicetitan_api_call(

@@ -117,7 +117,7 @@ _APP_KEY per tenant. See README for the full migration.
 
 Migration takes ~5 minutes per tenant: rename the four old vars with an `ST_TENANT_<NAME>_` prefix, and add `ST_TENANTS=<name>` naming that tenant. To add additional tenants, repeat the four-var block with new names and extend `ST_TENANTS`.
 
-## Available Tools (71 + `list_tenants`)
+## Available Tools (72 + `list_tenants`)
 
 Every tool below takes `tenant: str` as its first required argument. See "Multi-Tenant Usage" above.
 
@@ -226,6 +226,7 @@ Every tool below takes `tenant: str` as its first required argument. See "Multi-
 - `list_activity_categories` — Activity categories
 
 ### Power User
+- `export_feed` — Bulk-export an entire feed (customers, jobs, invoices, …) via continuation tokens; cheap on quota for full-table syncs and incremental change pulls
 - `servicetitan_api_call` — Make any arbitrary API call (GET/POST/PATCH/PUT)
 
 ## Authentication

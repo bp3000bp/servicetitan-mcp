@@ -292,3 +292,32 @@ class ServiceTitanClient:
         """Get a single resource by ID."""
         path = f"/{category}/v2/tenant/{self.tenant_id}/{resource}/{resource_id}"
         return await self.get(path)
+
+    async def export_resource(
+        self,
+        category: str,
+        feed: str,
+        from_token: str | None = None,
+        include_recent_changes: bool = False,
+    ) -> dict:
+        """Pull one page of a bulk export feed (continuation-token paged).
+
+        Export feeds stream a whole table chronologically by modification date,
+        paged via an opaque continuation token rather than page/pageSize. They
+        hit the main API bucket (not reporting) — cheap on quota.
+
+        category: API category slug (crm, jpm, accounting, settings, timesheets, ...)
+        feed: export feed path (customers, jobs, invoices, customers/contacts, ...)
+        from_token: ST `from` param — a `continueFrom` token from a prior
+            response, OR a date string (e.g. "2020-01-01") to start at a point in
+            time. None/empty starts from the beginning.
+        include_recent_changes: ST `includeRecentChanges` — delivers most-recent
+            changes faster but may return duplicate items across consecutive calls.
+        """
+        params: dict = {}
+        if from_token:
+            params["from"] = from_token
+        if include_recent_changes:
+            params["includeRecentChanges"] = "true"
+        path = f"/{category}/v2/tenant/{self.tenant_id}/export/{feed}"
+        return await self.get(path, params=params)
